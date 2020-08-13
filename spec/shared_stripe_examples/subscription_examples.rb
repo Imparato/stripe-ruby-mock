@@ -777,13 +777,15 @@ shared_examples 'Customer Subscriptions' do
       expect(sub.save).to be_truthy
       expect(sub.cancel_at_period_end).to be_truthy
       expect(sub.canceled_at).to be_truthy
+      expect(sub.cancel_at).to eq(sub.current_period_end)
 
       sub.cancel_at_period_end = false
       sub.save
 
       expect(sub.save).to be_truthy
       expect(sub.cancel_at_period_end).to be_falsey
-      expect(sub.canceled_at).to be_falsey
+      expect(sub.canceled_at).to be_nil
+      expect(sub.cancel_at).to be_nil
     end
 
     it "updates a subscription's pending invoice item interval" do
@@ -1069,6 +1071,7 @@ shared_examples 'Customer Subscriptions' do
       expect(result.status).to eq('canceled')
       expect(result.cancel_at_period_end).to eq false
       expect(result.canceled_at).to_not be_nil
+      expect(result.cancel_at).to be_nil
       expect(result.id).to eq(sub.id)
 
       customer = Stripe::Customer.retrieve(customer.id)
@@ -1088,6 +1091,7 @@ shared_examples 'Customer Subscriptions' do
 
     expect(result.status).to eq('active')
     expect(result.cancel_at_period_end).to eq(true)
+    expect(result.cancel_at).to eq(sub.current_period_end)
     expect(result.id).to eq(sub.id)
 
     customer = Stripe::Customer.retrieve('test_customer_sub')
@@ -1099,6 +1103,7 @@ shared_examples 'Customer Subscriptions' do
     expect(customer.subscriptions.data.first.cancel_at_period_end).to eq(true)
     expect(customer.subscriptions.data.first.ended_at).to be_nil
     expect(customer.subscriptions.data.first.canceled_at).to_not be_nil
+    expect(customer.subscriptions.data.first.cancel_at).to eq(sub.current_period_end)
   end
 
   it "resumes a subscription cancelled by updating cancel_at_period_end" do
@@ -1113,6 +1118,7 @@ shared_examples 'Customer Subscriptions' do
 
     expect(result.status).to eq('active')
     expect(result.cancel_at_period_end).to eq(false)
+    expect(result.cancel_at).to be_nil
     expect(result.id).to eq(sub.id)
 
     customer = Stripe::Customer.retrieve('test_customer_sub')
@@ -1122,6 +1128,7 @@ shared_examples 'Customer Subscriptions' do
 
     expect(customer.subscriptions.data.first.status).to eq('active')
     expect(customer.subscriptions.data.first.cancel_at_period_end).to eq(false)
+    expect(customer.subscriptions.data.first.cancel_at).to be_nil
     expect(customer.subscriptions.data.first.ended_at).to be_nil
     expect(customer.subscriptions.data.first.canceled_at).to be_nil
   end
