@@ -487,6 +487,31 @@ shared_examples 'Customer Subscriptions' do
       expect(sub.billing_cycle_anchor).to eq(billing_cycle_anchor)
     end
 
+    it 'computes current period end with a plan when current_period_start date is set' do
+      customer = Stripe::Customer.create(source: gen_card_tk)
+      current_period_start = Time.now.utc.to_i - 86_400
+      # plan billing interval is 1 month
+      expected_period_end = (Time.at(current_period_start).to_datetime >> 1).to_time.to_i
+
+      sub = Stripe::Subscription.create({ plan: plan.id, customer: customer.id, current_period_start: current_period_start, trial_end: "now" })
+      expect(sub.status).to eq('active')
+      expect(sub.current_period_start).to eq(current_period_start)
+      expect(sub.current_period_end).to eq(expected_period_end)
+    end
+
+    it 'computes current period end with a price when current_period_start date is set' do
+      price_attrs = { product: product.id, amount: 4999, currency: 'usd', recurring: { interval: 'week', interval_count: 1 } }
+      price = stripe_helper.create_price(price_attrs)
+
+      customer = Stripe::Customer.create(source: gen_card_tk)
+      current_period_start = Time.now.utc.to_i - 86_400
+
+      sub = Stripe::Subscription.create({ plan: price.id, customer: customer.id, current_period_start: current_period_start, trial_end: "now" })
+      expect(sub.status).to eq('active')
+      expect(sub.current_period_start).to eq(current_period_start)
+      expect(sub.current_period_end).to eq(current_period_start + 86_400 * 7)
+    end
+
     it 'when plan defined inside items', live: true do
       plan = stripe_helper.create_plan(id: 'BASE_PRICE_PLAN1', product: product.id)
 
