@@ -1,7 +1,7 @@
 module StripeMock
   module Data
     class List
-      attr_reader :data, :limit, :offset, :starting_after, :ending_before, :active
+      attr_reader :data, :limit, :offset, :starting_after, :ending_before, :active, :include_total_count
 
       def initialize(data, options = {})
         @data = Array(data.clone)
@@ -16,6 +16,8 @@ module StripeMock
           @data.sort_by { |x| x.created }
           @data.reverse!
         end
+
+        @include_total_count = options[:"include[]"] && options[:"include[]"].include?("total_count")
       end
 
       def url
@@ -23,7 +25,9 @@ module StripeMock
       end
 
       def to_hash
-        { object: "list", data: data_page, url: url, has_more: has_more? }
+        { object: "list", data: data_page, url: url, has_more: has_more? }.tap { |h|
+          h[:total_count] = data.size if include_total_count
+        }
       end
       alias_method :to_h, :to_hash
 

@@ -124,6 +124,25 @@ describe StripeMock::Data::List do
     end
   end
 
+  context "total_count option" do
+    it "doesn't include total_count by default" do
+      list = StripeMock::Data::List.new(double)
+      expect(list.to_h).not_to have_key(:total_count)
+    end
+
+    it "includes the total_count in the response" do
+      list = StripeMock::Data::List.new([double] * 10, :"include[]" => "total_count")
+
+      expect(list.to_h[:total_count]).to eq(10)
+    end
+
+    it "works well with limit" do
+      list = StripeMock::Data::List.new([double] * 10, limit: 1, :"include[]" => "total_count")
+
+      expect(list.to_h[:total_count]).to eq(10)
+    end
+  end
+
   context "pagination" do
     it "has a has_more field when it has more" do
       list = StripeMock::Data::List.new(
