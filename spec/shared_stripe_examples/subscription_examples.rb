@@ -1207,6 +1207,17 @@ shared_examples 'Customer Subscriptions' do
       expect(list.count).to eq(0)
       expect(list.data.length).to eq(0)
     end
+
+    it "retrieves a filter list of subscriptions" do
+      free_plan
+      paid = stripe_helper.create_plan(id: 'paid', product: product.id, amount: 499)
+      customer = Stripe::Customer.create(id: 'test_customer_sub', source: gen_card_tk, plan: free_plan.id)
+      subscription = Stripe::Subscription.create({ plan: 'paid', customer: customer.id })
+
+      subs = Stripe::Subscription.list(plan: free_plan.id)
+      expect(subs.count).to eq(1)
+      expect(subs.data[0][:plan]).to eq(free_plan)
+    end
   end
 
   describe "metadata" do

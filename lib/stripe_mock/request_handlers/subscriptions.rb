@@ -173,9 +173,8 @@ module StripeMock
       def retrieve_subscriptions(route, method_url, params, headers)
         route =~ method_url
 
-        Data.mock_list_object(subscriptions.values, params)
-        #customer = assert_existence :customer, $1, customers[$1]
-        #customer[:subscriptions]
+        filterable = %w[customer plan price status]
+        Data.mock_list_object(subscriptions.values, params.merge(filterable_by: filterable))
       end
 
       def update_subscription(route, method_url, params, headers)

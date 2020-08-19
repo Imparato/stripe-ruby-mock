@@ -1,7 +1,7 @@
 module StripeMock
   module Data
     class List
-      attr_reader :data, :limit, :offset, :starting_after, :ending_before, :active, :include_total_count
+      attr_reader :data, :limit, :offset, :starting_after, :ending_before, :active, :include_total_count, :filter_by
 
       def initialize(data, options = {})
         @data = Array(data.clone)
@@ -18,6 +18,10 @@ module StripeMock
         end
 
         @include_total_count = options[:"include[]"] && options[:"include[]"].include?("total_count")
+
+        # Each object type can construct the list with an array of filterable attributes
+        # under "filterable_by" option.
+        @filter_by = options.slice(*(options[:filterable_by] || []).map(&:to_sym))
       end
 
       def url
@@ -71,6 +75,18 @@ module StripeMock
       def filtered_data
         filtered_data = data
         filtered_data = filtered_data.select { |d| d[:active] == active } unless active.nil?
+        filter_by.each do |key, value|
+          filtered_data.select! do |d|
+            next true if d[key] == value
+
+            # comparison is made with ids (string), stripe hash (mocks) representations
+            # or a Stripe object which also respond to []
+            data_id = d[key].is_a?(String) ? d[key] : d[key][:id]
+            value_id = value.is_a?(String) ? value : value[:id]
+
+            data_id == value_id
+          end
+        end
 
         filtered_data
       end
