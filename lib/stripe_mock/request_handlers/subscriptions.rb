@@ -229,6 +229,7 @@ module StripeMock
 
         plan_amount_was = subscription.dig(:plan, :amount)
 
+        params[:metadata] = subscription[:metadata].merge(params.fetch(:metadata) { {} } )
         subscription = resolve_subscription_changes(subscription, subscription_plans, customer, params)
 
         verify_card_present(customer, subscription_plans.first, subscription, params) if plan_amount_was == 0 && subscription.dig(:plan, :amount) && subscription.dig(:plan, :amount) > 0

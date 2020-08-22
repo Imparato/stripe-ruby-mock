@@ -1248,6 +1248,19 @@ shared_examples 'Customer Subscriptions' do
       expect(customer.subscriptions.first.plan.id).to eq('Sample5')
       expect(customer.subscriptions.first.metadata['foo']).to eq('bar')
     end
-  end
 
+    it "conserves previous metadata when subscription is updated" do
+      # Stripe gem considers the metadata as additive
+      plan
+      customer = Stripe::Customer.create(source: gen_card_tk)
+      subscription = Stripe::Subscription.create({
+        customer: customer.id,
+        items: [{ plan: 'silver' }],
+        metadata: { foo: "bar" },
+      })
+
+      subscription.save(cancel_at_period_end: true)
+      expect(subscription.metadata['foo']).to eq('bar')
+    end
+  end
 end
