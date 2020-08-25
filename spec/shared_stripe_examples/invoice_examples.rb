@@ -68,6 +68,12 @@ shared_examples 'Invoice API' do
       expect(Stripe::Invoice.list.has_more).to eq(true)
     end
 
+    it "filters by status" do
+      3.times { Stripe::Invoice.create(status: "open").pay }
+      expect(Stripe::Invoice.list(status: "draft").count).to eq(2)
+      expect(Stripe::Invoice.list(status: "paid").count).to eq(3)
+    end
+
     context "when passing limit" do
       it "gets that many invoices" do
         expect(Stripe::Invoice.list(limit: 1).count).to eq(1)

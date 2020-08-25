@@ -29,13 +29,7 @@ module StripeMock
         params[:offset] ||= 0
         params[:limit] ||= 10
 
-        result = invoices.clone
-
-        if params[:customer]
-          result.delete_if { |k,v| v[:customer] != params[:customer] }
-        end
-
-        Data.mock_list_object(result.values, params)
+        Data.mock_list_object(invoices.values, params.merge(filterable_by: %w[customer status subscription]))
       end
 
       def get_invoice(route, method_url, params, headers)
