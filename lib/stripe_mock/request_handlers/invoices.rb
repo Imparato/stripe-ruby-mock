@@ -15,7 +15,7 @@ module StripeMock
       def new_invoice(route, method_url, params, headers)
         id = new_id('in')
         invoice_item = Data.mock_line_item()
-        invoices[id] = Data.mock_invoice([invoice_item], params.merge(:id => id))
+        invoices[id] = Data.mock_invoice([invoice_item], params.merge(:id => id, :status => "draft"))
       end
 
       def update_invoice(route, method_url, params, headers)
@@ -53,7 +53,7 @@ module StripeMock
         route =~ method_url
         assert_existence :invoice, $1, invoices[$1]
         charge = invoice_charge(invoices[$1])
-        invoices[$1].merge!(:paid => true, :attempted => true, :charge => charge[:id])
+        invoices[$1].merge!(:paid => true, :attempted => true, :charge => charge[:id], :status => "paid")
       end
 
       def upcoming_invoice(route, method_url, params, headers)
