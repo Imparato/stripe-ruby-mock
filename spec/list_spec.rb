@@ -3,11 +3,11 @@ require "spec_helper"
 describe StripeMock::Data::List do
   let(:stripe_helper) { StripeMock.create_test_helper }
 
-  before :all do
+  before do
     StripeMock.start
   end
 
-  after :all do
+  after do
     StripeMock.stop
   end
 
@@ -124,6 +124,25 @@ describe StripeMock::Data::List do
     end
   end
 
+  context "total_count option" do
+    it "doesn't include total_count by default" do
+      list = StripeMock::Data::List.new(double)
+      expect(list.to_h).not_to have_key(:total_count)
+    end
+
+    it "includes the total_count in the response" do
+      list = StripeMock::Data::List.new([double] * 10, :"include[]" => "total_count")
+
+      expect(list.to_h[:total_count]).to eq(10)
+    end
+
+    it "works well with limit" do
+      list = StripeMock::Data::List.new([double] * 10, limit: 1, :"include[]" => "total_count")
+
+      expect(list.to_h[:total_count]).to eq(10)
+    end
+  end
+
   context "pagination" do
     it "has a has_more field when it has more" do
       list = StripeMock::Data::List.new(
@@ -150,6 +169,73 @@ describe StripeMock::Data::List do
       list = StripeMock::Data::List.new(data, starting_after: "test_ch_unknown")
 
       expect { list.to_h }.to raise_error
+    end
+  end
+
+  context "filters" do
+    it "can filter by parametered value" do
+      data = []
+      product_a = Stripe::Product.create(id: "prod_456", name: "My Beautiful Product", type: "service")
+      product_b = Stripe::Product.create(id: "prod_789", name: "My Beautiful Product", type: "service")
+      plan_attributes = { product: product_a.id, interval: "month", currency: "usd", amount: 500 }
+      plan_a = Stripe::Plan.create(plan_attributes)
+      plan_b = Stripe::Plan.create(**plan_attributes, active: false)
+      plan_c = Stripe::Plan.create(**plan_attributes, product: product_b.id)
+
+      list = StripeMock::Data::List.new([plan_a, plan_b, plan_c], filterable_by: %w[active product], active: true)
+      hash = list.to_h
+      expect(hash[:data].size).to eq(2)
+      expect(hash[:data].map(&:active)).to all(be(true))
+
+      list = StripeMock::Data::List.new([plan_a, plan_b, plan_c], filterable_by: %w[active product], active: true, product: "prod_456")
+      hash = list.to_h
+      expect(hash[:data].size).to eq(1)
+      expect(hash[:data][0]).to eq(plan_a)
+    end
+
+    it "can filter with an id against stripe hash representation" do
+      # Subscriptions have their plans expanded as a hash
+      product = stripe_helper.create_product
+      paid = stripe_helper.create_plan(id: 'paid', product: product.id, amount: 499)
+      free = stripe_helper.create_plan(id: 'free', product: product.id, amount: 0)
+      cus1 = Stripe::Customer.create(id: 'test_customer_sub1', source: stripe_helper.generate_card_token, plan: free.id)
+      cus2 = Stripe::Customer.create(id: 'test_customer_sub2', source: stripe_helper.generate_card_token, plan: free.id)
+      cus3 = Stripe::Customer.create(id: 'test_customer_sub3', source: stripe_helper.generate_card_token, plan: paid.id)
+
+      subscriptions = [cus1, cus2, cus3].map { |cus| cus.subscriptions.first.to_hash }
+      list = StripeMock::Data::List.new(subscriptions, filterable_by: %w[plan], plan: "free")
+      hash = list.to_h
+      expect(hash[:data].size).to eq(2)
+      expect(hash[:data].map { |s| s[:plan][:id] }).to all(be(free.id))
+    end
+
+    it "can filter with an id against stripe object" do
+      # Subscriptions have their plans expanded as a hash
+      product = stripe_helper.create_product
+      paid = stripe_helper.create_plan(id: 'paid', product: product.id, amount: 499)
+      free = stripe_helper.create_plan(id: 'free', product: product.id, amount: 0)
+      cus1 = Stripe::Customer.create(id: 'test_customer_sub1', source: stripe_helper.generate_card_token, plan: free.id)
+      cus2 = Stripe::Customer.create(id: 'test_customer_sub2', source: stripe_helper.generate_card_token, plan: free.id)
+      cus3 = Stripe::Customer.create(id: 'test_customer_sub3', source: stripe_helper.generate_card_token, plan: paid.id)
+
+      subscriptions = [cus1, cus2, cus3].map { |cus| cus.subscriptions.first }
+      list = StripeMock::Data::List.new(subscriptions, filterable_by: %w[plan], plan: "free")
+      hash = list.to_h
+      expect(hash[:data].size).to eq(2)
+      expect(hash[:data].map { |s| s[:plan][:id] }).to all(be(free.id))
+    end
+
+    it "can filter with a stripe object against an id" do
+      product = stripe_helper.create_product
+      free = stripe_helper.create_plan(id: 'free', product: product.id, amount: 0)
+      cus1 = Stripe::Customer.create(id: 'test_customer_sub1', source: stripe_helper.generate_card_token, plan: free.id)
+      cus2 = Stripe::Customer.create(id: 'test_customer_sub2', source: stripe_helper.generate_card_token, plan: free.id)
+
+      subscriptions = [cus1, cus2].map { |cus| cus.subscriptions.first.to_hash }
+      list = StripeMock::Data::List.new(subscriptions, filterable_by: %w[customer], customer: cus1)
+      hash = list.to_h
+      expect(hash[:data].size).to eq(1)
+      expect(hash[:data][0][:customer]).to eq(cus1.id)
     end
   end
 end

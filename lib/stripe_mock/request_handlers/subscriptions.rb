@@ -102,7 +102,7 @@ module StripeMock
           customer[:default_source] = new_card[:id]
         end
 
-        allowed_params = %w(customer application_fee_percent coupon items metadata plan quantity source tax_percent trial_end trial_period_days current_period_start created prorate billing_cycle_anchor billing days_until_due idempotency_key enable_incomplete_payments cancel_at_period_end default_tax_rates payment_behavior pending_invoice_item_interval default_payment_method collection_method)
+        allowed_params = %w(customer application_fee_percent coupon items metadata plan quantity source tax_percent trial_end trial_period_days current_period_start created prorate billing_cycle_anchor billing days_until_due idempotency_key enable_incomplete_payments cancel_at_period_end default_tax_rates payment_behavior pending_invoice_item_interval default_payment_method collection_method expand)
         unknown_params = params.keys - allowed_params.map(&:to_sym)
         if unknown_params.length > 0
           raise Stripe::InvalidRequestError.new("Received unknown parameter: #{unknown_params.join}", unknown_params.first.to_s, http_status: 400)
@@ -136,6 +136,27 @@ module StripeMock
         if params[:cancel_at_period_end]
           subscription[:cancel_at_period_end] = true
           subscription[:canceled_at] = Time.now.utc.to_i
+          subscription[:cancel_at] = subscription[:current_period_end]
+        end
+
+        if params[:expand] && params[:expand].include?('latest_invoice.payment_intent')
+          id = new_id('pi')
+          payment_intent = Data.mock_payment_intent({
+            id: id,
+            amount: subscription[:plan][:amount],
+            currency: customer[:currency],
+            status: 'succeeded'
+          })
+
+          payment_intents[id] = payment_intent
+
+          id = new_id('in')
+          invoice = Data.mock_invoice([], id: id)
+          invoice[:payment_intent] = payment_intent
+
+          invoices[id] = invoice
+
+          subscription[:latest_invoice] = invoice
         end
 
         subscriptions[subscription[:id]] = subscription
@@ -153,9 +174,8 @@ module StripeMock
       def retrieve_subscriptions(route, method_url, params, headers)
         route =~ method_url
 
-        Data.mock_list_object(subscriptions.values, params)
-        #customer = assert_existence :customer, $1, customers[$1]
-        #customer[:subscriptions]
+        filterable = %w[customer plan price status]
+        Data.mock_list_object(subscriptions.values, params.merge(filterable_by: filterable))
       end
 
       def update_subscription(route, method_url, params, headers)
@@ -200,9 +220,11 @@ module StripeMock
         if params[:cancel_at_period_end]
           subscription[:cancel_at_period_end] = true
           subscription[:canceled_at] = Time.now.utc.to_i
+          subscription[:cancel_at] = subscription[:current_period_end]
         elsif params.has_key?(:cancel_at_period_end)
           subscription[:cancel_at_period_end] = false
           subscription[:canceled_at] = nil
+          subscription[:cancel_at] = nil
         end
 
         params[:current_period_start] = subscription[:current_period_start]
@@ -210,6 +232,7 @@ module StripeMock
 
         plan_amount_was = subscription.dig(:plan, :amount)
 
+        params[:metadata] = subscription[:metadata].merge(params.fetch(:metadata) { {} } )
         subscription = resolve_subscription_changes(subscription, subscription_plans, customer, params)
 
         verify_card_present(customer, subscription_plans.first, subscription, params) if plan_amount_was == 0 && subscription.dig(:plan, :amount) && subscription.dig(:plan, :amount) > 0

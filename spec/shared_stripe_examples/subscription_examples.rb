@@ -487,6 +487,31 @@ shared_examples 'Customer Subscriptions' do
       expect(sub.billing_cycle_anchor).to eq(billing_cycle_anchor)
     end
 
+    it 'computes current period end with a plan when current_period_start date is set' do
+      customer = Stripe::Customer.create(source: gen_card_tk)
+      current_period_start = Time.now.utc.to_i - 86_400
+      # plan billing interval is 1 month
+      expected_period_end = (Time.at(current_period_start).to_datetime >> 1).to_time.to_i
+
+      sub = Stripe::Subscription.create({ plan: plan.id, customer: customer.id, current_period_start: current_period_start, trial_end: "now" })
+      expect(sub.status).to eq('active')
+      expect(sub.current_period_start).to eq(current_period_start)
+      expect(sub.current_period_end).to eq(expected_period_end)
+    end
+
+    it 'computes current period end with a price when current_period_start date is set' do
+      price_attrs = { product: product.id, amount: 4999, currency: 'usd', recurring: { interval: 'week', interval_count: 1 } }
+      price = stripe_helper.create_price(price_attrs)
+
+      customer = Stripe::Customer.create(source: gen_card_tk)
+      current_period_start = Time.now.utc.to_i - 86_400
+
+      sub = Stripe::Subscription.create({ plan: price.id, customer: customer.id, current_period_start: current_period_start, trial_end: "now" })
+      expect(sub.status).to eq('active')
+      expect(sub.current_period_start).to eq(current_period_start)
+      expect(sub.current_period_end).to eq(current_period_start + 86_400 * 7)
+    end
+
     it 'when plan defined inside items', live: true do
       plan = stripe_helper.create_plan(id: 'BASE_PRICE_PLAN1', product: product.id)
 
@@ -752,13 +777,15 @@ shared_examples 'Customer Subscriptions' do
       expect(sub.save).to be_truthy
       expect(sub.cancel_at_period_end).to be_truthy
       expect(sub.canceled_at).to be_truthy
+      expect(sub.cancel_at).to eq(sub.current_period_end)
 
       sub.cancel_at_period_end = false
       sub.save
 
       expect(sub.save).to be_truthy
       expect(sub.cancel_at_period_end).to be_falsey
-      expect(sub.canceled_at).to be_falsey
+      expect(sub.canceled_at).to be_nil
+      expect(sub.cancel_at).to be_nil
     end
 
     it "updates a subscription's pending invoice item interval" do
@@ -1044,6 +1071,7 @@ shared_examples 'Customer Subscriptions' do
       expect(result.status).to eq('canceled')
       expect(result.cancel_at_period_end).to eq false
       expect(result.canceled_at).to_not be_nil
+      expect(result.cancel_at).to be_nil
       expect(result.id).to eq(sub.id)
 
       customer = Stripe::Customer.retrieve(customer.id)
@@ -1063,6 +1091,7 @@ shared_examples 'Customer Subscriptions' do
 
     expect(result.status).to eq('active')
     expect(result.cancel_at_period_end).to eq(true)
+    expect(result.cancel_at).to eq(sub.current_period_end)
     expect(result.id).to eq(sub.id)
 
     customer = Stripe::Customer.retrieve('test_customer_sub')
@@ -1074,6 +1103,7 @@ shared_examples 'Customer Subscriptions' do
     expect(customer.subscriptions.data.first.cancel_at_period_end).to eq(true)
     expect(customer.subscriptions.data.first.ended_at).to be_nil
     expect(customer.subscriptions.data.first.canceled_at).to_not be_nil
+    expect(customer.subscriptions.data.first.cancel_at).to eq(sub.current_period_end)
   end
 
   it "resumes a subscription cancelled by updating cancel_at_period_end" do
@@ -1088,6 +1118,7 @@ shared_examples 'Customer Subscriptions' do
 
     expect(result.status).to eq('active')
     expect(result.cancel_at_period_end).to eq(false)
+    expect(result.cancel_at).to be_nil
     expect(result.id).to eq(sub.id)
 
     customer = Stripe::Customer.retrieve('test_customer_sub')
@@ -1097,6 +1128,7 @@ shared_examples 'Customer Subscriptions' do
 
     expect(customer.subscriptions.data.first.status).to eq('active')
     expect(customer.subscriptions.data.first.cancel_at_period_end).to eq(false)
+    expect(customer.subscriptions.data.first.cancel_at).to be_nil
     expect(customer.subscriptions.data.first.ended_at).to be_nil
     expect(customer.subscriptions.data.first.canceled_at).to be_nil
   end
@@ -1182,6 +1214,17 @@ shared_examples 'Customer Subscriptions' do
       expect(list.count).to eq(0)
       expect(list.data.length).to eq(0)
     end
+
+    it "retrieves a filter list of subscriptions" do
+      free_plan
+      paid = stripe_helper.create_plan(id: 'paid', product: product.id, amount: 499)
+      customer = Stripe::Customer.create(id: 'test_customer_sub', source: gen_card_tk, plan: free_plan.id)
+      subscription = Stripe::Subscription.create({ plan: 'paid', customer: customer.id })
+
+      subs = Stripe::Subscription.list(plan: free_plan.id)
+      expect(subs.count).to eq(1)
+      expect(subs.data[0][:plan]).to eq(free_plan)
+    end
   end
 
   describe "metadata" do
@@ -1212,6 +1255,19 @@ shared_examples 'Customer Subscriptions' do
       expect(customer.subscriptions.first.plan.id).to eq('Sample5')
       expect(customer.subscriptions.first.metadata['foo']).to eq('bar')
     end
-  end
 
+    it "conserves previous metadata when subscription is updated" do
+      # Stripe gem considers the metadata as additive
+      plan
+      customer = Stripe::Customer.create(source: gen_card_tk)
+      subscription = Stripe::Subscription.create({
+        customer: customer.id,
+        items: [{ plan: 'silver' }],
+        metadata: { foo: "bar" },
+      })
+
+      subscription.save(cancel_at_period_end: true)
+      expect(subscription.metadata['foo']).to eq('bar')
+    end
+  end
 end
