@@ -10,6 +10,7 @@ module StripeMock
         klass.add_handler 'delete /v1/customers/(.*)/sources/(.*)', :delete_source
         klass.add_handler 'post /v1/customers/(.*)/sources/(.*)', :update_source
         klass.add_handler 'post /v1/sources', :create_unattached_source
+        klass.add_handler 'get /v1/sources/(.*)', :retrieve_unattached_source
       end
 
       def create_source(route, method_url, params, headers)
@@ -55,6 +56,11 @@ module StripeMock
         id = new_id('src')
 
         unattached_sources[id] = Data.mock_source(params.merge(id: id))
+      end
+
+      def retrieve_unattached_source(route, method_url, params, headers)
+        route =~ method_url
+        assert_existence :unattached_source, $1, unattached_sources[$1]
       end
     end
   end
