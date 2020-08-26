@@ -1,16 +1,24 @@
 require 'spec_helper'
 
 shared_examples 'Invoice API' do
+  let(:customer) { Stripe::Customer.create }
+  let(:invoice_item) { Stripe::InvoiceItem.create(customer: customer, amount: 1000) }
+  before do
+    invoice_item
+  end
 
   context "creating a new invoice" do
     it "creates a stripe invoice" do
-      invoice = Stripe::Invoice.create
+      invoice = Stripe::Invoice.create(customer: customer)
       expect(invoice.id).to match(/^test_in/)
       expect(invoice.status).to eq("draft")
+
+      expect(invoice.lines.count).to eq(1)
+      expect(invoice.lines.first.invoice_item).to eq(invoice_item.id)
     end
 
     it "stores a created stripe invoice in memory" do
-      invoice = Stripe::Invoice.create
+      invoice = Stripe::Invoice.create(customer: customer)
       data = test_data_source(:invoices)
       expect(data[invoice.id]).to_not be_nil
       expect(data[invoice.id][:id]).to eq(invoice.id)
@@ -19,7 +27,7 @@ shared_examples 'Invoice API' do
 
   context "retrieving an invoice" do
     it "retrieves a stripe invoice" do
-      original = Stripe::Invoice.create
+      original = Stripe::Invoice.create(customer: customer)
       invoice = Stripe::Invoice.retrieve(original.id)
       expect(invoice.id).to eq(original.id)
     end
@@ -27,7 +35,7 @@ shared_examples 'Invoice API' do
 
   context "updating an invoice" do
     it "updates a stripe invoice" do
-      invoice = Stripe::Invoice.create(currency: "cad", statement_description: "orig-desc")
+      invoice = Stripe::Invoice.create(customer: customer, currency: "cad", statement_description: "orig-desc")
       expect(invoice.currency).to eq("cad")
       expect(invoice.statement_description).to eq("orig-desc")
 
@@ -44,8 +52,11 @@ shared_examples 'Invoice API' do
   context "retrieving a list of invoices" do
     before do
       @customer = Stripe::Customer.create(email: 'johnny@appleseed.com')
+      Stripe::InvoiceItem.create(customer: @customer.id, amount: 100, currency: "usd")
       @invoice = Stripe::Invoice.create(customer: @customer.id)
-      @invoice2 = Stripe::Invoice.create
+
+      Stripe::InvoiceItem.create(customer: customer, amount: 100, currency: "usd")
+      @invoice2 = Stripe::Invoice.create(customer: customer)
     end
 
     it "stores invoices for a customer in memory" do
@@ -58,18 +69,18 @@ shared_examples 'Invoice API' do
     end
 
     it "defaults count to 10 invoices" do
-      11.times { Stripe::Invoice.create }
+      11.times { Stripe::Invoice.create(customer: customer) }
       expect(Stripe::Invoice.list.count).to eq(10)
     end
 
     it "is marked as having more when more objects exist" do
-      11.times { Stripe::Invoice.create }
+      11.times { Stripe::Invoice.create(customer: customer) }
 
       expect(Stripe::Invoice.list.has_more).to eq(true)
     end
 
     it "filters by status" do
-      3.times { Stripe::Invoice.create(status: "open").pay }
+      3.times { Stripe::Invoice.create(customer: customer, status: "open").pay }
       expect(Stripe::Invoice.list(status: "draft").count).to eq(2)
       expect(Stripe::Invoice.list(status: "paid").count).to eq(3)
     end
@@ -83,7 +94,7 @@ shared_examples 'Invoice API' do
 
   context "paying an invoice" do
     before do
-      @invoice = Stripe::Invoice.create
+      @invoice = Stripe::Invoice.create(customer: customer)
     end
 
     it 'updates attempted and paid flags' do
@@ -107,6 +118,7 @@ shared_examples 'Invoice API' do
       customer = Stripe::Customer.create({
         source: stripe_helper.generate_card_token
       })
+      Stripe::InvoiceItem.create(customer: customer, amount: 100, currency: "usd")
       customer_invoice = Stripe::Invoice.create({customer: customer})
 
       customer_invoice.pay

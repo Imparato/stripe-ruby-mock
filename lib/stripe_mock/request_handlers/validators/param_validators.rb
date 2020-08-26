@@ -135,10 +135,19 @@ module StripeMock
         end
       end
 
+      def validate_create_invoice_params(params)
+        customer_id = params[:customer].is_a?(Stripe::Customer) ? params[:customer][:id] : params[:customer]
+
+        raise Stripe::InvalidRequestError.new(missing_param_message(:customer), :customer) if customer_id.nil?
+
+        assert_existence :customer, customer_id, customers[customer_id]
+
+        params[:customer] = customer_id
+      end
+
       def require_param(param_name)
         raise Stripe::InvalidRequestError.new("Missing required param: #{param_name}.", param_name.to_s, http_status: 400)
       end
-
     end
   end
 end
