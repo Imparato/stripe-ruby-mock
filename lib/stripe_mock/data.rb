@@ -434,10 +434,17 @@ module StripeMock
 
     def self.mock_line_item(params = {})
       currency = params[:currency] || StripeMock.default_currency
+      type = params.delete(:type) || (params[:subscription] ? "subscription" : "invoiceitem")
+
+      invoice_item = if type == "invoiceitem"
+                       params.delete(:invoice_item) || Data.mock_invoice_item[:id]
+                     end
+
       {
         id: "ii_test",
         object: "line_item",
-        type: "invoiceitem",
+        type: type,
+        invoice_item: invoice_item,
         livemode: false,
         amount: 1000,
         currency: currency,

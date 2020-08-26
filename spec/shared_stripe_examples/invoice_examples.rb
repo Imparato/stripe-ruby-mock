@@ -445,6 +445,10 @@ shared_examples 'Invoice API' do
         expect(line_items.data[0].object).to eq('line_item')
         expect(line_items.data[0].description).to eq('Test invoice item')
         expect(line_items.data[0].type).to eq('invoiceitem')
+
+        expect(line_items.data[0].invoice_item).to_not be_nil
+        invoice_item = Stripe::InvoiceItem.retrieve(line_items.data[0].invoice_item)
+        expect(invoice_item).to_not be_nil
       end
 
       it 'returns all line items for upcoming invoice' do
@@ -458,6 +462,7 @@ shared_examples 'Invoice API' do
         expect(line_items.data[0].object).to eq('line_item')
         expect(line_items.data[0].description).to eq('Test invoice item')
         expect(line_items.data[0].type).to eq('subscription')
+        expect(line_items.data[0].invoice_item).to be_nil
       end
     end
 
