@@ -22,6 +22,16 @@ shared_examples 'Invoice Item API' do
       expect(data[invoice_item.id]).to_not be_nil
       expect(data[invoice_item.id][:id]).to eq(invoice_item.id)
     end
+
+    it "creates a invoice item with a price" do
+      product = stripe_helper.create_product
+      price = Stripe::Price.create(product: product.id, currency: "eur", amount: 158)
+
+      invoice_item = Stripe::InvoiceItem.create(id: "ii_1", price: price.id)
+
+      expect(invoice_item.price).to eq(price)
+      expect(invoice_item.amount).to eq(158)
+    end
   end
 
   context "retrieving an invoice item" do
@@ -29,6 +39,18 @@ shared_examples 'Invoice Item API' do
       original = Stripe::InvoiceItem.create
       invoice_item = Stripe::InvoiceItem.retrieve(original.id)
       expect(invoice_item.id).to eq(original.id)
+    end
+
+    it "returns the invoice item with associated price instance" do
+      product = stripe_helper.create_product
+      price = Stripe::Price.create(product: product.id, currency: "eur", amount: 158)
+
+      Stripe::InvoiceItem.create(id: "ii_1", price: price.id)
+
+      invoice_item = Stripe::InvoiceItem.retrieve("ii_1")
+
+      expect(invoice_item.price).to eq(price)
+      expect(invoice_item.amount).to eq(158)
     end
   end
 
@@ -58,6 +80,22 @@ shared_examples 'Invoice Item API' do
     invoice_item = Stripe::InvoiceItem.retrieve("test_invoice_item_update")
     expect(invoice_item.amount).to eq(original.amount)
     expect(invoice_item.description).to eq('new desc')
+  end
+
+  it "updates a stripe invoice_item with a price" do
+    product = stripe_helper.create_product
+    price = Stripe::Price.create(product: product.id, currency: "eur", amount: 158)
+
+    original = Stripe::InvoiceItem.create(id: 'test_invoice_item_update')
+    original.price = price
+    original.save
+
+    expect(original.price).to eq(original.price)
+    expect(original.amount).to eq(158)
+
+    invoice_item = Stripe::InvoiceItem.retrieve("test_invoice_item_update")
+    expect(invoice_item.price).to eq(price)
+    expect(invoice_item.amount).to eq(158)
   end
 
   it "deletes a invoice_item" do
