@@ -34,6 +34,13 @@ describe StripeMock::Data::List do
     expect(list.url).to eq("/v1/customers")
   end
 
+  it "infers object type for url when list is initialized from mocks hash" do
+    charge = StripeMock::Data.mock_charge
+    list = StripeMock::Data::List.new([charge])
+
+    expect(list.url).to eq("/v1/charges")
+  end
+
   it "returns in descending order if created available" do
     charge_newer = Stripe::Charge.create(amount: 1, currency: 'usd', source: stripe_helper.generate_card_token, created: 5)
     charge_older = Stripe::Charge.create(amount: 1, currency: 'usd', source: stripe_helper.generate_card_token, created: 4)

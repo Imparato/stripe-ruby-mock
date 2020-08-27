@@ -92,7 +92,12 @@ module StripeMock
       end
 
       def object_types
-        if first_object = data[0]
+        first_object = data[0]
+        return unless first_object
+
+        if first_object.is_a?(Hash) && first_object.key?(:object)
+          "#{first_object[:object]}s"
+        else
           "#{first_object.class.to_s.split('::')[-1].downcase}s"
         end
       end
