@@ -28,6 +28,7 @@ module StripeMock
           raise Stripe::InvalidRequestError.new("Nothing to invoice for customer", http_status: 400) if pending_items.empty?
 
           line_items = pending_items.map { |ii|
+            ii[:invoice] = id
             Data.mock_line_item(id: new_id('il'), invoice_item: ii[:id])
           }
         end

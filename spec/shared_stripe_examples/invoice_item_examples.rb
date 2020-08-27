@@ -32,6 +32,21 @@ shared_examples 'Invoice Item API' do
       expect(invoice_item.price).to eq(price)
       expect(invoice_item.amount).to eq(158)
     end
+
+    it "associates the invoice item to the invoice" do
+      customer = Stripe::Customer.create
+      # create a first item, required for the invoice creation
+      ii1 = Stripe::InvoiceItem.create(customer: customer)
+      invoice = Stripe::Invoice.create(customer: customer)
+
+      ii2 = Stripe::InvoiceItem.create(invoice: invoice, customer: customer)
+      invoice.refresh
+
+      expect(ii2.invoice).to eq(invoice.id)
+      expect(invoice.lines.data.count).to eq(2)
+      expect(invoice.lines.data[0].invoice_item).to eq(ii1.id)
+      expect(invoice.lines.data[1].invoice_item).to eq(ii2.id)
+    end
   end
 
   context "retrieving an invoice item" do
@@ -98,10 +113,50 @@ shared_examples 'Invoice Item API' do
     expect(invoice_item.amount).to eq(158)
   end
 
-  it "deletes a invoice_item" do
+  it "updates an invoice_item with an invoice" do
+    customer = Stripe::Customer.create
+    invoice_item = Stripe::InvoiceItem.create(customer: customer)
+
+    expect(invoice_item.invoice).to be_nil
+
+    invoice = Stripe::Invoice.create(customer: customer)
+
+    invoice_item.invoice = invoice
+    invoice_item.save
+
+    expect(invoice_item.invoice).to eq(invoice.id)
+    expect(invoice.lines.data[0].invoice_item).to eq(invoice_item.id)
+  end
+
+  it "updates an invoice_item for invoice disassociation" do
+    customer = Stripe::Customer.create
+    invoice_item = Stripe::InvoiceItem.create(customer: customer)
+    invoice = Stripe::Invoice.create(customer: customer)
+
+    expect(invoice_item.refresh.invoice).to_not be_nil
+
+    invoice_item.invoice = nil
+    invoice_item.save
+
+    expect(invoice_item.invoice).to be_nil
+    expect(invoice.refresh.lines).to be_empty
+  end
+
+  it "deletes an invoice_item" do
     invoice_item = Stripe::InvoiceItem.create(id: 'test_invoice_item_sub')
     invoice_item = invoice_item.delete
     expect(invoice_item.deleted).to eq true
   end
 
+  it "deleting an invoice_item remove it from invoice" do
+    customer = Stripe::Customer.create
+    invoice_item = Stripe::InvoiceItem.create(customer: customer)
+    invoice = Stripe::Invoice.create(customer: customer)
+
+    expect(invoice.lines.data[0].invoice_item).to eq(invoice_item.id)
+    invoice_item.delete
+
+    invoice.refresh
+    expect(invoice.lines).to be_empty
+  end
 end
