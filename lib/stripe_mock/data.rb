@@ -373,6 +373,7 @@ module StripeMock
     end
 
     def self.mock_invoice(lines, params={})
+      now = Time.now.to_i
       in_id = params[:id] || "test_in_default"
       currency = params[:currency] || StripeMock.default_currency
       lines << Data.mock_line_item() if lines.empty?
@@ -381,9 +382,9 @@ module StripeMock
         status: 'open',
         invoice_pdf: 'pdf_url',
         hosted_invoice_url: 'hosted_invoice_url',
-        created: 1349738950,
-        period_end: 1349738950,
-        period_start: 1349738950,
+        created: now,
+        period_end: now,
+        period_start: now,
         due_date: nil,
         lines: {
           object: "list",
@@ -406,7 +407,7 @@ module StripeMock
         statement_descriptor: nil,
         tax: 10,
         tax_percent: nil,
-        webhooks_delivered_at: 1349825350,
+        webhooks_delivered_at: now,
         livemode: false,
         attempt_count: 0,
         amount_due: 100,
@@ -414,7 +415,7 @@ module StripeMock
         currency: currency,
         starting_balance: 0,
         ending_balance: 0,
-        next_payment_attempt: 1349825350,
+        next_payment_attempt: now,
         charge: nil,
         discount: nil,
         subscription: nil,
@@ -433,6 +434,7 @@ module StripeMock
     end
 
     def self.mock_line_item(params = {})
+      now = Time.now.to_i
       currency = params[:currency] || StripeMock.default_currency
       type = params.delete(:type) || (params[:subscription] ? "subscription" : "invoiceitem")
 
@@ -451,8 +453,8 @@ module StripeMock
         discountable: false,
         proration: false,
         period: {
-          start: 1349738920,
-          end: 1349738920
+          start: now,
+          end: now
         },
         tax_amounts: [
           {
@@ -468,11 +470,12 @@ module StripeMock
     end
 
     def self.mock_invoice_item(params = {})
+      now = Time.now.to_i
       currency = params[:currency] || StripeMock.default_currency
       {
         id: "test_ii",
         object: "invoiceitem",
-        created: 1349738920,
+        created: now,
         amount: 1099,
         livemode: false,
         proration: false,
