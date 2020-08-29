@@ -380,6 +380,12 @@ module StripeMock
       invoice = {
         id: 'in_test_invoice',
         status: 'open',
+        status_transitions: {
+          finalized_at: nil,
+          marked_uncollectible_at: nil,
+          paid_at: nil,
+          voided_at: nil,
+        },
         invoice_pdf: 'pdf_url',
         hosted_invoice_url: 'hosted_invoice_url',
         created: now,

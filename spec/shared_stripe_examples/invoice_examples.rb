@@ -101,6 +101,8 @@ shared_examples 'Invoice API' do
       @invoice.finalize_invoice
 
       expect(@invoice.status).to eq("open")
+      expect(@invoice.status_transitions.finalized_at).to eq(Time.now.to_i)
+      expect(@invoice.status_transitions.paid_at).to be_nil
     end
 
     it "creates and link payment intent" do
@@ -126,6 +128,7 @@ shared_examples 'Invoice API' do
       expect(@invoice.status).to eq("paid")
       expect(@invoice.amount_due).to eq(0)
       expect(@invoice.amount_paid).to eq(amount)
+      expect(@invoice.status_transitions.paid_at).to eq(Time.now.to_i)
     end
 
     it 'creates a new charge object' do

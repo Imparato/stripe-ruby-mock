@@ -78,6 +78,7 @@ module StripeMock
         merge_params = {
           status: "open",
           payment_intent: new_payment_intent("", "", payment_intent_params, {})[:id],
+          status_transitions: invoice[:status_transitions].merge(finalized_at: Time.now.to_i)
         }
 
         invoices[$1].merge!(merge_params)
@@ -186,6 +187,7 @@ module StripeMock
           status: "paid",
           amount_paid: invoice[:amount_due],
           amount_due:  0,
+          status_transitions: invoice[:status_transitions].merge(paid_at: Time.now.to_i),
         }
       end
 
