@@ -23,6 +23,23 @@ shared_examples 'Invoice API' do
       expect(data[invoice.id]).to_not be_nil
       expect(data[invoice.id][:id]).to eq(invoice.id)
     end
+
+    it "computes the total from items amounts" do
+      Stripe::InvoiceItem.create(customer: customer, amount: 500)
+      invoice = Stripe::Invoice.create(customer: customer)
+      expect(invoice.total).to eq(1500)
+      expect(invoice.amount_due).to eq(1500)
+    end
+
+    it "computes the total from items unit prices" do
+      product = stripe_helper.create_product
+      price = Stripe::Price.create(product: product.id, currency: "eur", unit_amount: 158)
+      Stripe::InvoiceItem.create(customer: customer, price: price.id)
+      invoice = Stripe::Invoice.create(customer: customer)
+
+      expect(invoice.total).to eq(1158)
+      expect(invoice.amount_due).to eq(1158)
+    end
   end
 
   context "retrieving an invoice" do

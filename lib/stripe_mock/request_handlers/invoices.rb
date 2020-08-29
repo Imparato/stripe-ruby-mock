@@ -30,7 +30,8 @@ module StripeMock
 
           line_items = pending_items.map { |ii|
             ii[:invoice] = id
-            Data.mock_line_item(id: new_id('il'), invoice_item: ii[:id], amount: ii[:amount])
+            amount = ii[:price] ? ii[:price][:unit_amount] : ii[:amount]
+            Data.mock_line_item(id: new_id('il'), invoice_item: ii[:id], amount: amount)
           }
         end
 

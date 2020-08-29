@@ -25,7 +25,7 @@ shared_examples 'Invoice Item API' do
 
     it "creates a invoice item with a price" do
       product = stripe_helper.create_product
-      price = Stripe::Price.create(product: product.id, currency: "eur", amount: 158)
+      price = Stripe::Price.create(product: product.id, currency: "eur", unit_amount: 158)
 
       invoice_item = Stripe::InvoiceItem.create(id: "ii_1", price: price.id)
 
@@ -58,7 +58,7 @@ shared_examples 'Invoice Item API' do
 
     it "returns the invoice item with associated price instance" do
       product = stripe_helper.create_product
-      price = Stripe::Price.create(product: product.id, currency: "eur", amount: 158)
+      price = Stripe::Price.create(product: product.id, currency: "eur", unit_amount: 158)
 
       Stripe::InvoiceItem.create(id: "ii_1", price: price.id)
 
@@ -99,7 +99,7 @@ shared_examples 'Invoice Item API' do
 
   it "updates a stripe invoice_item with a price" do
     product = stripe_helper.create_product
-    price = Stripe::Price.create(product: product.id, currency: "eur", amount: 158)
+    price = Stripe::Price.create(product: product.id, currency: "eur", unit_amount: 158)
 
     original = Stripe::InvoiceItem.create(id: 'test_invoice_item_update')
     original.price = price

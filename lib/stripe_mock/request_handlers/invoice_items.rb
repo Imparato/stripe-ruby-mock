@@ -46,6 +46,8 @@ module StripeMock
 
         inject_price_object(item)
         compute_amount(item)
+
+        item
       end
 
       def delete_invoice_item(route, method_url, params, headers)
@@ -76,6 +78,8 @@ module StripeMock
         item = assert_existence :invoice_item, $1, invoice_items[$1]
 
         inject_price_object(item)
+
+        item
       end
 
       private
@@ -92,8 +96,6 @@ module StripeMock
 
         price = assert_existence :price, item[:price], prices[item[:price]]
         item[:price] = price
-
-        item
       end
 
       def inject_to_invoice(item)
@@ -114,9 +116,7 @@ module StripeMock
       def compute_amount(item)
         return item if item[:price].nil?
 
-        item[:amount] = item[:price][:amount]
-
-        item
+        item[:amount] = item[:price][:unit_amount]
       end
     end
   end
