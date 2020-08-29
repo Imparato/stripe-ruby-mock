@@ -9,6 +9,7 @@ module StripeMock
         klass.add_handler 'get /v1/invoices/(.*)',           :get_invoice
         klass.add_handler 'get /v1/invoices',                :list_invoices
         klass.add_handler 'post /v1/invoices/(.*)/pay',      :pay_invoice
+        klass.add_handler 'post /v1/invoices/(.*)/finalize', :finalize_invoice
         klass.add_handler 'post /v1/invoices/(.*)',          :update_invoice
       end
 
@@ -67,6 +68,19 @@ module StripeMock
         charge = invoice_charge(invoices[$1])
 
         invoices[$1].merge!(invoice_pay_attributes(invoice, charge))
+      end
+
+      def finalize_invoice(route, method_url, params, headers)
+        route =~ method_url
+        invoice = assert_existence :invoice, $1, invoices[$1]
+
+        payment_intent_params = { amount: invoice[:amount_due], currency: invoice[:currency], invoice: invoice[:id] }
+        merge_params = {
+          status: "open",
+          payment_intent: new_payment_intent("", "", payment_intent_params, {})[:id],
+        }
+
+        invoices[$1].merge!(merge_params)
       end
 
       def upcoming_invoice(route, method_url, params, headers)

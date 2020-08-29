@@ -92,6 +92,26 @@ shared_examples 'Invoice API' do
     end
   end
 
+  context "finalizing an invoice" do
+    before do
+      @invoice = Stripe::Invoice.create(customer: customer)
+    end
+
+    it "updates status and relevant fields" do
+      @invoice.finalize_invoice
+
+      expect(@invoice.status).to eq("open")
+    end
+
+    it "creates and link payment intent" do
+      expect { @invoice.finalize_invoice }.to change { Stripe::PaymentIntent.list.data.count }.by 1
+      payment_intent = Stripe::PaymentIntent.list.data.last
+      expect(@invoice.payment_intent).to eq(payment_intent.id)
+      expect(payment_intent.invoice).to eq(@invoice.id)
+      expect(payment_intent.amount).to eq(@invoice.amount_due)
+    end
+  end
+
   context "paying an invoice" do
     before do
       @invoice = Stripe::Invoice.create(customer: customer)
