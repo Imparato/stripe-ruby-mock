@@ -97,11 +97,15 @@ shared_examples 'Invoice API' do
       @invoice = Stripe::Invoice.create(customer: customer)
     end
 
-    it 'updates attempted and paid flags' do
+    it 'updates payable attributes' do
+      amount = @invoice.amount_due
       @invoice = @invoice.pay
+
       expect(@invoice.attempted).to eq(true)
       expect(@invoice.paid).to eq(true)
       expect(@invoice.status).to eq("paid")
+      expect(@invoice.amount_due).to eq(0)
+      expect(@invoice.amount_paid).to eq(amount)
     end
 
     it 'creates a new charge object' do

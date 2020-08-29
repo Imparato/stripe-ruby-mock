@@ -63,9 +63,10 @@ module StripeMock
 
       def pay_invoice(route, method_url, params, headers)
         route =~ method_url
-        assert_existence :invoice, $1, invoices[$1]
+        invoice = assert_existence :invoice, $1, invoices[$1]
         charge = invoice_charge(invoices[$1])
-        invoices[$1].merge!(:paid => true, :attempted => true, :charge => charge[:id], :status => "paid")
+
+        invoices[$1].merge!(invoice_pay_attributes(invoice, charge))
       end
 
       def upcoming_invoice(route, method_url, params, headers)
@@ -161,6 +162,17 @@ module StripeMock
           period_start: prorating ? invoice_date : preview_subscription[:current_period_start],
           period_end: prorating ? invoice_date : preview_subscription[:current_period_end],
           next_payment_attempt: preview_subscription[:current_period_end] + 3600 )
+      end
+
+      def invoice_pay_attributes(invoice, charge)
+        {
+          paid: true,
+          attempted: true,
+          charge: charge[:id],
+          status: "paid",
+          amount_paid: invoice[:amount_due],
+          amount_due:  0,
+        }
       end
 
       private
