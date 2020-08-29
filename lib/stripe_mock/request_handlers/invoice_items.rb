@@ -13,9 +13,11 @@ module StripeMock
       def new_invoice_item(route, method_url, params, headers)
         params[:id] ||= new_id('ii')
 
-        inject_to_invoice(params) if params[:invoice]
+        ensure_invoice_as_id(params) if params[:invoice]
 
         item = Data.mock_invoice_item(params)
+
+        inject_to_invoice(item) if params[:invoice]
         inject_price_object(item)
         compute_amount(item)
 
@@ -35,6 +37,7 @@ module StripeMock
           end
 
           if params[:invoice]
+            ensure_invoice_as_id(params)
             inject_to_invoice(params)
           end
         end
@@ -77,6 +80,12 @@ module StripeMock
 
       private
 
+      def ensure_invoice_as_id(params)
+        return if params[:invoice].is_a?(String)
+
+        params[:invoice] = params[:invoice][:id]
+      end
+
       def inject_price_object(item)
         return item if item[:price].nil?
         return item unless item[:price].is_a?(String)
@@ -87,13 +96,10 @@ module StripeMock
         item
       end
 
-      def inject_to_invoice(params)
-        invoice_id = params[:invoice].is_a?(String) ? params[:invoice] : params[:invoice][:id]
-        invoice = assert_existence :invoice, invoice_id, invoices[invoice_id]
+      def inject_to_invoice(item)
+        invoice = assert_existence :invoice, item[:invoice], invoices[item[:invoice]]
 
-        params[:invoice] = invoice_id # ensure invoice is an ID, like in Stripe response
-
-        line_item = Data.mock_line_item(id: new_id('il'), invoice_item: params[:id])
+        line_item = Data.mock_line_item(id: new_id('il'), invoice_item: item[:id], amount: item[:amount])
         invoice[:lines][:data] << line_item
       end
 

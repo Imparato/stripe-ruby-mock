@@ -169,11 +169,18 @@ module StripeMock
         payment_intent[:status] = 'succeeded'
         btxn = new_balance_transaction('txn', { source: payment_intent[:id] })
 
-        payment_intent[:charges][:data] << Data.mock_charge(
+        charge = Data.mock_charge(
           balance_transaction: btxn,
           amount: payment_intent[:amount],
           currency: payment_intent[:currency]
         )
+
+        payment_intent[:charges][:data] << charge
+
+        if payment_intent[:invoice]
+          invoice = assert_existence :invoice, payment_intent[:invoice], invoices[payment_intent[:invoice]]
+          invoice.merge!(invoice_pay_attributes(invoice, charge))
+        end
 
         payment_intent
       end

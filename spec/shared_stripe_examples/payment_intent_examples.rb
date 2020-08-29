@@ -108,6 +108,21 @@ shared_examples 'PaymentIntent API' do
     expect(confirmed_payment_intent.charges.data.first.object).to eq('charge')
   end
 
+  it "update accordingly the linked invoice when payment succeeded" do
+    customer = Stripe::Customer.create
+    item = Stripe::InvoiceItem.create(amount: 123, currency: "usd", customer: customer)
+    invoice = Stripe::Invoice.create(customer: customer).finalize_invoice
+
+    # NOTE: payment intent is created by the invoice finalization
+    payment_intent = Stripe::PaymentIntent.retrieve(invoice.payment_intent)
+    payment_intent.confirm
+
+    invoice.refresh
+    expect(invoice.status).to eq("paid")
+    expect(invoice.amount_due).to eq(0)
+    expect(invoice.amount_paid).to eq(123)
+  end
+
   it "cancels a stripe payment_intent" do
     payment_intent = Stripe::PaymentIntent.create(amount: 100, currency: "usd")
     confirmed_payment_intent = payment_intent.cancel()
