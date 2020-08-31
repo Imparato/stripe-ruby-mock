@@ -22,6 +22,31 @@ shared_examples 'Invoice Item API' do
       expect(data[invoice_item.id]).to_not be_nil
       expect(data[invoice_item.id][:id]).to eq(invoice_item.id)
     end
+
+    it "creates a invoice item with a price" do
+      product = stripe_helper.create_product
+      price = Stripe::Price.create(product: product.id, currency: "eur", unit_amount: 158)
+
+      invoice_item = Stripe::InvoiceItem.create(id: "ii_1", price: price.id)
+
+      expect(invoice_item.price).to eq(price)
+      expect(invoice_item.amount).to eq(158)
+    end
+
+    it "associates the invoice item to the invoice" do
+      customer = Stripe::Customer.create
+      # create a first item, required for the invoice creation
+      ii1 = Stripe::InvoiceItem.create(customer: customer)
+      invoice = Stripe::Invoice.create(customer: customer)
+
+      ii2 = Stripe::InvoiceItem.create(invoice: invoice, customer: customer)
+      invoice.refresh
+
+      expect(ii2.invoice).to eq(invoice.id)
+      expect(invoice.lines.data.count).to eq(2)
+      expect(invoice.lines.data[0].invoice_item).to eq(ii1.id)
+      expect(invoice.lines.data[1].invoice_item).to eq(ii2.id)
+    end
   end
 
   context "retrieving an invoice item" do
@@ -29,6 +54,18 @@ shared_examples 'Invoice Item API' do
       original = Stripe::InvoiceItem.create
       invoice_item = Stripe::InvoiceItem.retrieve(original.id)
       expect(invoice_item.id).to eq(original.id)
+    end
+
+    it "returns the invoice item with associated price instance" do
+      product = stripe_helper.create_product
+      price = Stripe::Price.create(product: product.id, currency: "eur", unit_amount: 158)
+
+      Stripe::InvoiceItem.create(id: "ii_1", price: price.id)
+
+      invoice_item = Stripe::InvoiceItem.retrieve("ii_1")
+
+      expect(invoice_item.price).to eq(price)
+      expect(invoice_item.amount).to eq(158)
     end
   end
 
@@ -60,10 +97,66 @@ shared_examples 'Invoice Item API' do
     expect(invoice_item.description).to eq('new desc')
   end
 
-  it "deletes a invoice_item" do
+  it "updates a stripe invoice_item with a price" do
+    product = stripe_helper.create_product
+    price = Stripe::Price.create(product: product.id, currency: "eur", unit_amount: 158)
+
+    original = Stripe::InvoiceItem.create(id: 'test_invoice_item_update')
+    original.price = price
+    original.save
+
+    expect(original.price).to eq(original.price)
+    expect(original.amount).to eq(158)
+
+    invoice_item = Stripe::InvoiceItem.retrieve("test_invoice_item_update")
+    expect(invoice_item.price).to eq(price)
+    expect(invoice_item.amount).to eq(158)
+  end
+
+  it "updates an invoice_item with an invoice" do
+    customer = Stripe::Customer.create
+    invoice_item = Stripe::InvoiceItem.create(customer: customer)
+
+    expect(invoice_item.invoice).to be_nil
+
+    invoice = Stripe::Invoice.create(customer: customer)
+
+    invoice_item.invoice = invoice
+    invoice_item.save
+
+    expect(invoice_item.invoice).to eq(invoice.id)
+    expect(invoice.lines.data[0].invoice_item).to eq(invoice_item.id)
+  end
+
+  it "updates an invoice_item for invoice disassociation" do
+    customer = Stripe::Customer.create
+    invoice_item = Stripe::InvoiceItem.create(customer: customer)
+    invoice = Stripe::Invoice.create(customer: customer)
+
+    expect(invoice_item.refresh.invoice).to_not be_nil
+
+    invoice_item.invoice = nil
+    invoice_item.save
+
+    expect(invoice_item.invoice).to be_nil
+    expect(invoice.refresh.lines).to be_empty
+  end
+
+  it "deletes an invoice_item" do
     invoice_item = Stripe::InvoiceItem.create(id: 'test_invoice_item_sub')
     invoice_item = invoice_item.delete
     expect(invoice_item.deleted).to eq true
   end
 
+  it "deleting an invoice_item remove it from invoice" do
+    customer = Stripe::Customer.create
+    invoice_item = Stripe::InvoiceItem.create(customer: customer)
+    invoice = Stripe::Invoice.create(customer: customer)
+
+    expect(invoice.lines.data[0].invoice_item).to eq(invoice_item.id)
+    invoice_item.delete
+
+    invoice.refresh
+    expect(invoice.lines).to be_empty
+  end
 end

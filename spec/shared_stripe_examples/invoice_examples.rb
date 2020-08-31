@@ -1,24 +1,50 @@
 require 'spec_helper'
 
 shared_examples 'Invoice API' do
+  let(:customer) { Stripe::Customer.create }
+  let(:invoice_item) { Stripe::InvoiceItem.create(customer: customer, amount: 1000) }
+  before do
+    invoice_item
+  end
 
   context "creating a new invoice" do
     it "creates a stripe invoice" do
-      invoice = Stripe::Invoice.create
+      invoice = Stripe::Invoice.create(customer: customer)
       expect(invoice.id).to match(/^test_in/)
+      expect(invoice.status).to eq("draft")
+
+      expect(invoice.lines.count).to eq(1)
+      expect(invoice.lines.first.invoice_item).to eq(invoice_item.id)
     end
 
     it "stores a created stripe invoice in memory" do
-      invoice = Stripe::Invoice.create
+      invoice = Stripe::Invoice.create(customer: customer)
       data = test_data_source(:invoices)
       expect(data[invoice.id]).to_not be_nil
       expect(data[invoice.id][:id]).to eq(invoice.id)
+    end
+
+    it "computes the total from items amounts" do
+      Stripe::InvoiceItem.create(customer: customer, amount: 500)
+      invoice = Stripe::Invoice.create(customer: customer)
+      expect(invoice.total).to eq(1500)
+      expect(invoice.amount_due).to eq(1500)
+    end
+
+    it "computes the total from items unit prices" do
+      product = stripe_helper.create_product
+      price = Stripe::Price.create(product: product.id, currency: "eur", unit_amount: 158)
+      Stripe::InvoiceItem.create(customer: customer, price: price.id)
+      invoice = Stripe::Invoice.create(customer: customer)
+
+      expect(invoice.total).to eq(1158)
+      expect(invoice.amount_due).to eq(1158)
     end
   end
 
   context "retrieving an invoice" do
     it "retrieves a stripe invoice" do
-      original = Stripe::Invoice.create
+      original = Stripe::Invoice.create(customer: customer)
       invoice = Stripe::Invoice.retrieve(original.id)
       expect(invoice.id).to eq(original.id)
     end
@@ -26,7 +52,7 @@ shared_examples 'Invoice API' do
 
   context "updating an invoice" do
     it "updates a stripe invoice" do
-      invoice = Stripe::Invoice.create(currency: "cad", statement_description: "orig-desc")
+      invoice = Stripe::Invoice.create(customer: customer, currency: "cad", statement_description: "orig-desc")
       expect(invoice.currency).to eq("cad")
       expect(invoice.statement_description).to eq("orig-desc")
 
@@ -43,8 +69,11 @@ shared_examples 'Invoice API' do
   context "retrieving a list of invoices" do
     before do
       @customer = Stripe::Customer.create(email: 'johnny@appleseed.com')
+      Stripe::InvoiceItem.create(customer: @customer.id, amount: 100, currency: "usd")
       @invoice = Stripe::Invoice.create(customer: @customer.id)
-      @invoice2 = Stripe::Invoice.create
+
+      Stripe::InvoiceItem.create(customer: customer, amount: 100, currency: "usd")
+      @invoice2 = Stripe::Invoice.create(customer: customer)
     end
 
     it "stores invoices for a customer in memory" do
@@ -57,14 +86,20 @@ shared_examples 'Invoice API' do
     end
 
     it "defaults count to 10 invoices" do
-      11.times { Stripe::Invoice.create }
+      11.times { Stripe::Invoice.create(customer: customer) }
       expect(Stripe::Invoice.list.count).to eq(10)
     end
 
     it "is marked as having more when more objects exist" do
-      11.times { Stripe::Invoice.create }
+      11.times { Stripe::Invoice.create(customer: customer) }
 
       expect(Stripe::Invoice.list.has_more).to eq(true)
+    end
+
+    it "filters by status" do
+      3.times { Stripe::Invoice.create(customer: customer, status: "open").pay }
+      expect(Stripe::Invoice.list(status: "draft").count).to eq(2)
+      expect(Stripe::Invoice.list(status: "paid").count).to eq(3)
     end
 
     context "when passing limit" do
@@ -74,15 +109,43 @@ shared_examples 'Invoice API' do
     end
   end
 
-  context "paying an invoice" do
+  context "finalizing an invoice" do
     before do
-      @invoice = Stripe::Invoice.create
+      @invoice = Stripe::Invoice.create(customer: customer)
     end
 
-    it 'updates attempted and paid flags' do
+    it "updates status and relevant fields" do
+      @invoice.finalize_invoice
+
+      expect(@invoice.status).to eq("open")
+      expect(@invoice.status_transitions.finalized_at).to eq(Time.now.to_i)
+      expect(@invoice.status_transitions.paid_at).to be_nil
+    end
+
+    it "creates and link payment intent" do
+      expect { @invoice.finalize_invoice }.to change { Stripe::PaymentIntent.list.data.count }.by 1
+      payment_intent = Stripe::PaymentIntent.list.data.last
+      expect(@invoice.payment_intent).to eq(payment_intent.id)
+      expect(payment_intent.invoice).to eq(@invoice.id)
+      expect(payment_intent.amount).to eq(@invoice.amount_due)
+    end
+  end
+
+  context "paying an invoice" do
+    before do
+      @invoice = Stripe::Invoice.create(customer: customer)
+    end
+
+    it 'updates payable attributes' do
+      amount = @invoice.amount_due
       @invoice = @invoice.pay
+
       expect(@invoice.attempted).to eq(true)
       expect(@invoice.paid).to eq(true)
+      expect(@invoice.status).to eq("paid")
+      expect(@invoice.amount_due).to eq(0)
+      expect(@invoice.amount_paid).to eq(amount)
+      expect(@invoice.status_transitions.paid_at).to eq(Time.now.to_i)
     end
 
     it 'creates a new charge object' do
@@ -99,6 +162,7 @@ shared_examples 'Invoice API' do
       customer = Stripe::Customer.create({
         source: stripe_helper.generate_card_token
       })
+      Stripe::InvoiceItem.create(customer: customer, amount: 100, currency: "usd")
       customer_invoice = Stripe::Invoice.create({customer: customer})
 
       customer_invoice.pay
@@ -437,6 +501,10 @@ shared_examples 'Invoice API' do
         expect(line_items.data[0].object).to eq('line_item')
         expect(line_items.data[0].description).to eq('Test invoice item')
         expect(line_items.data[0].type).to eq('invoiceitem')
+
+        expect(line_items.data[0].invoice_item).to_not be_nil
+        invoice_item = Stripe::InvoiceItem.retrieve(line_items.data[0].invoice_item)
+        expect(invoice_item).to_not be_nil
       end
 
       it 'returns all line items for upcoming invoice' do
@@ -450,6 +518,7 @@ shared_examples 'Invoice API' do
         expect(line_items.data[0].object).to eq('line_item')
         expect(line_items.data[0].description).to eq('Test invoice item')
         expect(line_items.data[0].type).to eq('subscription')
+        expect(line_items.data[0].invoice_item).to be_nil
       end
     end
 

@@ -9,13 +9,33 @@ module StripeMock
         klass.add_handler 'get /v1/invoices/(.*)',           :get_invoice
         klass.add_handler 'get /v1/invoices',                :list_invoices
         klass.add_handler 'post /v1/invoices/(.*)/pay',      :pay_invoice
+        klass.add_handler 'post /v1/invoices/(.*)/finalize', :finalize_invoice
         klass.add_handler 'post /v1/invoices/(.*)',          :update_invoice
       end
 
       def new_invoice(route, method_url, params, headers)
         id = new_id('in')
-        invoice_item = Data.mock_line_item()
-        invoices[id] = Data.mock_invoice([invoice_item], params.merge(:id => id))
+
+        # params[:customer] is ensured to be an id
+        validate_create_invoice_params(params)
+
+        # If not subscription set, the created invoice will include all pending invoice items for the customer
+        unless params.key?(:subscription)
+          pending_items = invoice_items.values.select { |ii|
+            ii_customer_id = ii[:customer].is_a?(Stripe::Customer) ? ii[:customer][:id] : ii[:customer]
+            ii_customer_id == params[:customer]
+          }
+
+          raise Stripe::InvalidRequestError.new("Nothing to invoice for customer", http_status: 400) if pending_items.empty?
+
+          line_items = pending_items.map { |ii|
+            ii[:invoice] = id
+            amount = ii[:price] ? ii[:price][:unit_amount] : ii[:amount]
+            Data.mock_line_item(id: new_id('il'), invoice_item: ii[:id], amount: amount)
+          }
+        end
+
+        invoices[id] = Data.mock_invoice(line_items, params.merge(:id => id, :status => "draft"))
       end
 
       def update_invoice(route, method_url, params, headers)
@@ -29,13 +49,7 @@ module StripeMock
         params[:offset] ||= 0
         params[:limit] ||= 10
 
-        result = invoices.clone
-
-        if params[:customer]
-          result.delete_if { |k,v| v[:customer] != params[:customer] }
-        end
-
-        Data.mock_list_object(result.values, params)
+        Data.mock_list_object(invoices.values, params.merge(filterable_by: %w[customer status subscription]))
       end
 
       def get_invoice(route, method_url, params, headers)
@@ -51,9 +65,24 @@ module StripeMock
 
       def pay_invoice(route, method_url, params, headers)
         route =~ method_url
-        assert_existence :invoice, $1, invoices[$1]
+        invoice = assert_existence :invoice, $1, invoices[$1]
         charge = invoice_charge(invoices[$1])
-        invoices[$1].merge!(:paid => true, :attempted => true, :charge => charge[:id])
+
+        invoices[$1].merge!(invoice_pay_attributes(invoice, charge))
+      end
+
+      def finalize_invoice(route, method_url, params, headers)
+        route =~ method_url
+        invoice = assert_existence :invoice, $1, invoices[$1]
+
+        payment_intent_params = { amount: invoice[:amount_due], currency: invoice[:currency], invoice: invoice[:id] }
+        merge_params = {
+          status: "open",
+          payment_intent: new_payment_intent("", "", payment_intent_params, {})[:id],
+          status_transitions: invoice[:status_transitions].merge(finalized_at: Time.now.to_i)
+        }
+
+        invoices[$1].merge!(merge_params)
       end
 
       def upcoming_invoice(route, method_url, params, headers)
@@ -151,6 +180,18 @@ module StripeMock
           next_payment_attempt: preview_subscription[:current_period_end] + 3600 )
       end
 
+      def invoice_pay_attributes(invoice, charge)
+        {
+          paid: true,
+          attempted: true,
+          charge: charge[:id],
+          status: "paid",
+          amount_paid: invoice[:amount_due],
+          amount_due:  0,
+          status_transitions: invoice[:status_transitions].merge(paid_at: Time.now.to_i),
+        }
+      end
+
       private
 
       def get_mock_subscription_line_item(subscription)
@@ -171,7 +212,7 @@ module StripeMock
       #anonymous charge
       def invoice_charge(invoice)
         begin
-          new_charge(nil, nil, {customer: invoice[:customer]["id"], amount: invoice[:amount_due], currency: StripeMock.default_currency}, nil)
+          new_charge(nil, nil, {customer: invoice[:customer], amount: invoice[:amount_due], currency: StripeMock.default_currency}, nil)
         rescue Stripe::InvalidRequestError
           new_charge(nil, nil, {source: generate_card_token, amount: invoice[:amount_due], currency: StripeMock.default_currency}, nil)
         end
