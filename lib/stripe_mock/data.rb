@@ -364,7 +364,7 @@ module StripeMock
         tax_percent: nil,
         discount: nil,
         metadata: {},
-        default_tax_rates: nil,
+        default_tax_rates: params.delete(:default_tax_rates) || [],
         default_payment_method: nil,
         pending_invoice_item_interval: nil,
         next_pending_invoice_item_invoice: nil,
