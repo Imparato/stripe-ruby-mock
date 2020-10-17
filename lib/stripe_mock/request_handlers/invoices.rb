@@ -11,6 +11,7 @@ module StripeMock
         klass.add_handler 'post /v1/invoices/(.*)/pay',      :pay_invoice
         klass.add_handler 'post /v1/invoices/(.*)/finalize', :finalize_invoice
         klass.add_handler 'post /v1/invoices/(.*)',          :update_invoice
+        klass.add_handler 'delete /v1/invoices/([^/]*)',     :delete_invoice
       end
 
       def new_invoice(route, method_url, params, headers)
@@ -189,6 +190,26 @@ module StripeMock
           amount_paid: invoice[:amount_due],
           amount_due:  0,
           status_transitions: invoice[:status_transitions].merge(paid_at: Time.now.to_i),
+        }
+      end
+
+      def delete_invoice(route, method_url, params, headers)
+        route =~ method_url
+        assert_existence :invoice, $1, invoices[$1]
+
+        invoice = invoices[$1]
+
+        unless invoice[:subscription].nil?
+          raise Stripe::InvalidRequestError.new("You can't delete invoices created by subscriptions", 'invoice', http_status: 400)
+        end
+
+        unless invoice[:status] == "draft"
+          raise Stripe::InvalidRequestError.new("You can only delete draft invoices", 'invoice', http_status: 400)
+        end
+
+        invoices[$1] = {
+          id: invoice[:id],
+          deleted: true
         }
       end
 

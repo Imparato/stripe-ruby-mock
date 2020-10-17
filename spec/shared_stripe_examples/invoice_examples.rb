@@ -592,4 +592,29 @@ shared_examples 'Invoice API' do
     end
 
   end
+
+  context "delete an invoice" do
+    before do
+      @invoice = Stripe::Invoice.create(customer: customer)
+    end
+
+    it 'mark invoice as deleted' do
+      @invoice.delete
+      expect(@invoice[:deleted]).to eq(true)
+    end
+
+    it "can't delete a non-draft invoice" do
+      @invoice.finalize_invoice
+      expect { @invoice.delete }.to raise_error {|e|
+        expect(e).to be_a(Stripe::InvalidRequestError)
+        expect(e.http_status).to eq 400
+      }
+
+      @invoice.pay
+      expect { @invoice.delete }.to raise_error {|e|
+        expect(e).to be_a(Stripe::InvalidRequestError)
+        expect(e.http_status).to eq 400
+      }
+    end
+  end
 end
